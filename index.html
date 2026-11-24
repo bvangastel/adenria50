@@ -1,0 +1,114 @@
+<title>Ad &amp; Ria 50 jaar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: het fotoboek ligt open op een donkere tafel; bladeren per spread, op de telefoon per pagina */
+@font-face{font-family:"Allura";src:url(fonts/allura.woff) format("woff");font-display:swap}
+@font-face{font-family:"Garamond";src:url(fonts/garamond.woff) format("woff");font-weight:400 800;font-display:swap}
+@font-face{font-family:"Garamond";src:url(fonts/garamond-italic.woff) format("woff");font-style:italic;font-display:swap}
+:root{
+  color-scheme:dark;
+  --table:#1f1813;
+  --table-hi:#33271c;
+  --ink:#efe8da;
+  --muted:#b3a994;
+  --gold:#d6b46a;
+  --gold-lo:#9c7a35;
+  --script:"Allura","Segoe Script",cursive;
+  --serif:"Garamond","EB Garamond",Georgia,serif;
+}
+html,body{height:100%}
+body{margin:0;background:var(--table);color:var(--ink);font-family:var(--serif);overflow:hidden;font-variant-numeric:oldstyle-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--table)}
+.app{height:100%;display:flex;flex-direction:column;box-sizing:border-box;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 0;
+  background:radial-gradient(110% 80% at 50% 35%,var(--table-hi) 0%,var(--table) 70%)}
+header{text-align:center;display:flex;flex-direction:column;gap:2px}
+header h1{font-family:var(--script);font-weight:400;font-size:clamp(34px,5vw,52px);line-height:1.1;margin:0;color:var(--gold)}
+header p{margin:0;font-size:15px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding-block:14px;position:relative;touch-action:pan-y}
+.book{position:relative;overflow:hidden;border-radius:3px;box-shadow:0 24px 50px rgba(0,0,0,.65),0 4px 10px rgba(0,0,0,.5);background:#17161a;max-width:100%}
+.book img{display:block;width:100%;height:100%;object-fit:cover;user-select:none;-webkit-user-drag:none}
+.book.spread::after{content:"";position:absolute;inset:0 auto 0 50%;width:6%;transform:translateX(-50%);pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(0,0,0,.28) 47%,rgba(255,255,255,.05) 50%,rgba(0,0,0,.28) 53%,transparent)}
+.book.half img{position:absolute;top:0;height:100%;width:200%;max-width:none}
+.book.fade{animation:fade .3s ease}
+@keyframes fade{from{opacity:.4}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.book.fade{animation:none}}
+@media (max-width:480px){header p{font-size:12px;letter-spacing:.16em}}
+.bar{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;padding-block:6px calc(14px + env(safe-area-inset-bottom,0px))}
+.bar button{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid rgba(214,180,106,.55);border-radius:999px;padding:8px 20px;cursor:pointer;min-width:44px}
+.bar button:hover{border-color:var(--gold);color:var(--gold)}
+.bar button:disabled{opacity:.3;cursor:default}
+.bar button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.where{min-width:13ch;text-align:center;color:var(--muted);font-size:16px}
+</style>
+
+<div class="app">
+  <header><h1>Ad &amp; Ria</h1><p>Gouden huwelijk · 27 september 2026</p></header>
+  <div class="stage" id="stage"><div class="book" id="book"></div></div>
+  <div class="bar">
+    <button id="prev" aria-label="Vorige pagina">‹ Vorige</button>
+    <span class="where" id="where" aria-live="polite"></span>
+    <button id="next" aria-label="Volgende pagina">Volgende ›</button>
+  </div>
+</div>
+
+<script>
+// 18 spreads van 54 x 27 cm; spread 1 links en spread 18 rechts zijn de binnenkant van de kaft
+const N = 18;
+const pad = n => String(n).padStart(2, "0");
+const COVER = {src: "img/voorkant.jpg", ratio: 1200 / 1240, label: "Voorkant"};
+const BACK = {src: "img/achterkant.jpg", ratio: 1200 / 1240, label: "Achterkant"};
+// paginanummers in het boek: spread k heeft links 2k-2 en rechts 2k-1
+const wideViews = [COVER, ...Array.from({length: N}, (_, i) => {
+  const k = i + 1, l = 2 * k - 2, r = 2 * k - 1;
+  const label = k === 1 ? `Pagina ${r}` : k === N ? `Pagina ${l}` : `Pagina ${l}–${r}`;
+  return {src: `img/s${pad(k)}.jpg`, ratio: 2, spread: true, label};
+}), BACK];
+const narrowViews = [COVER];
+for (let k = 1; k <= N; k++){
+  if (k !== 1) narrowViews.push({src: `img/s${pad(k)}.jpg`, ratio: 1, half: "L", label: `Pagina ${2 * k - 2}`});
+  if (k !== N) narrowViews.push({src: `img/s${pad(k)}.jpg`, ratio: 1, half: "R", label: `Pagina ${2 * k - 1}`});
+}
+narrowViews.push(BACK);
+
+const book = document.getElementById("book"), stage = document.getElementById("stage");
+const narrow = () => window.innerWidth < 720;
+let views = narrow() ? narrowViews : wideViews, cur = 0;
+
+function size(){
+  const v = views[cur], r = stage.getBoundingClientRect();
+  const h = r.height - 28, w = r.width;
+  let bw = Math.min(w, h * v.ratio);
+  book.style.width = bw + "px"; book.style.height = bw / v.ratio + "px";
+}
+function render(anim){
+  const v = views[cur];
+  book.className = "book" + (v.spread ? " spread" : "") + (v.half ? " half" : "");
+  const style = v.half ? ` style="left:${v.half === "L" ? "0" : "-100%"}"` : "";
+  book.innerHTML = `<img src="${v.src}" alt="${v.label} van het fotoboek"${style}>`;
+  if (anim){ void book.offsetWidth; book.classList.add("fade"); }
+  size();
+  document.getElementById("where").textContent = v.label;
+  document.getElementById("prev").disabled = cur === 0;
+  document.getElementById("next").disabled = cur === views.length - 1;
+  try { history.replaceState(null, "", "#p" + cur); } catch(e) {}
+  // volgende afbeelding alvast laden
+  const nx = views[cur + 1]; if (nx){ const i = new Image(); i.src = nx.src; }
+}
+function go(d){ const n = Math.min(views.length - 1, Math.max(0, cur + d)); if (n !== cur){ cur = n; render(true); } }
+document.getElementById("prev").onclick = () => go(-1);
+document.getElementById("next").onclick = () => go(1);
+document.addEventListener("keydown", e => { if (e.key === "ArrowRight") go(1); if (e.key === "ArrowLeft") go(-1); });
+let sx = null;
+stage.addEventListener("pointerdown", e => sx = e.clientX);
+stage.addEventListener("pointerup", e => { if (sx === null) return; const dx = e.clientX - sx; sx = null;
+  if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1); else { const r = stage.getBoundingClientRect(); go(e.clientX > r.left + r.width / 2 ? 1 : -1); } });
+window.addEventListener("resize", () => {
+  const want = narrow() ? narrowViews : wideViews;
+  if (want !== views){ const lbl = views[cur].src; views = want; cur = Math.max(0, views.findIndex(v => v.src === lbl)); render(false); }
+  else size();
+});
+try { const m = location.hash.match(/^#p(\d+)$/); if (m) cur = Math.min(views.length - 1, +m[1]); } catch(e) {}
+render(false);
+</script>
